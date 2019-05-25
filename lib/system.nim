@@ -1107,7 +1107,8 @@ const
     ##
     ## Possible values:
     ## `"windows"`, `"macosx"`, `"linux"`, `"netbsd"`, `"freebsd"`,
-    ## `"openbsd"`, `"solaris"`, `"aix"`, `"haiku"`, `"standalone"`.
+    ## `"openbsd"`, `"solaris"`, `"aix"`, `"haiku"`, `"standalone"`,
+    ## `"kernel"`.
 
   hostCPU* {.magic: "HostCPU".}: string = ""
     ## A string that describes the host CPU.

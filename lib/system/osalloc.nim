@@ -80,8 +80,10 @@ when defined(emscripten) and not defined(StandaloneHeapSize):
 elif defined(genode) and not defined(StandaloneHeapSize):
   include genode/alloc # osAllocPages, osTryAllocPages, osDeallocPages
 
-elif defined(nintendoswitch) and not defined(StandaloneHeapSize):
+elif defined(kernel):
+  include kernel/memory
 
+elif defined(nintendoswitch) and not defined(StandaloneHeapSize):
   import nintendoswitch/switch_memory
 
   type
