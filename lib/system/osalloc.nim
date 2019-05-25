@@ -80,6 +80,9 @@ when defined(emscripten):
 elif defined(genode):
   include genode/alloc # osAllocPages, osTryAllocPages, osDeallocPages
 
+elif defined(kernel):
+  include kernel/memory
+
 elif defined(nintendoswitch):
 
   import nintendoswitch/switch_memory

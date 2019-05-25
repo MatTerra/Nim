@@ -22,7 +22,7 @@ type
     osNone, osDos, osWindows, osOs2, osLinux, osMorphos, osSkyos, osSolaris,
     osIrix, osNetbsd, osFreebsd, osOpenbsd, osDragonfly, osAix, osPalmos, osQnx,
     osAmiga, osAtari, osNetware, osMacos, osMacosx, osHaiku, osAndroid, osVxworks
-    osGenode, osJS, osNimVM, osStandalone, osNintendoSwitch
+    osGenode, osJS, osNimVM, osStandalone, osNintendoSwitch, osKernel
 
 type
   TInfoOSProp* = enum
@@ -173,6 +173,10 @@ const
       objExt: ".o", newLine: "\x0A", pathSep: ":", dirSep: "/",
       scriptExt: ".sh", curDir: ".", exeExt: ".elf", extSep: ".",
       props: {ospNeedsPIC, ospPosix}),
+     (name: "Kernel", parDir: "..", dllFrmt: "lib$1.so", altDirSep: "/",
+      objExt: ".o", newLine: "\x0A", pathSep: ":", dirSep: "/",
+      scriptExt: ".sh", curDir: ".", exeExt: "", extSep: ".",
+      props: {}),
      ]
 
 type
