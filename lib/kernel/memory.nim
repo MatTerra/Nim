@@ -13,16 +13,15 @@ when not defined(kernel):
   {.error: "kernel only module".}
   
 proc kmalloc(size: csize, flags: cint): pointer {.header: "linux/slab.h", importc: "kmalloc"}
+proc kfree(a: pointer) {.header: "linux/slab.h", importc: "kfree"}
 var GFP_KERNEL {.header: "linux/gfp.h", importc: "GFP_KERNEL"}: cint
 
 proc osAllocPages(size: int): pointer =
-  echo "osAllocPages"
   return kmalloc(size, GFP_KERNEL)
 
 proc osTryAllocPages(size: int): pointer =
-  echo "osTryAllocPages"
-  return nil
+  return kmalloc(size, GFP_KERNEL)
 
 proc osDeallocPages(p: pointer; size: int) =
-  echo "osDeallocPages"
+  kfree(p)
   discard
