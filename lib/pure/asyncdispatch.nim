@@ -1088,18 +1088,25 @@ else:
   type
     AsyncFD* = distinct cint
     Callback = proc (fd: AsyncFD): bool {.closure,gcsafe.}
+    EventCallback = proc() {.closure,gcsafe.}
 
     AsyncData = object
       readList: seq[Callback]
       writeList: seq[Callback]
 
-    AsyncEvent* = distinct SelectEvent
+    AsyncEventImpl* = object
+      id: SelectorEventId
+
+    AsyncEvent* = ref AsyncEventImpl
 
     PDispatcher* = ref object of PDispatcherBase
       selector: Selector[AsyncData]
+      selectEvent: SelectEvent
+      eventCallback: Table[SelectorEventId, EventCallback]
+      eventIdSeq: SelectorEventId
 
   proc `==`*(x, y: AsyncFD): bool {.borrow.}
-  proc `==`*(x, y: AsyncEvent): bool {.borrow.}
+  #proc `==`*(x, y: AsyncEvent): bool {.borrow.}
 
   template newAsyncData(): AsyncData =
     AsyncData(
@@ -1138,7 +1145,8 @@ else:
     getGlobalDispatcher().selector.unregister(fd.SocketHandle)
 
   proc unregister*(ev: AsyncEvent) =
-    getGlobalDispatcher().selector.unregister(SelectEvent(ev))
+    let p = getGlobalDispatcher()
+    p.eventCallback.del ev.id
 
   proc contains*(disp: PDispatcher, fd: AsyncFD): bool =
     return fd.SocketHandle in disp.selector
@@ -1287,6 +1295,7 @@ else:
     for i in 0..<count:
       let fd = keys[i].fd.AsyncFD
       let events = keys[i].events
+      let userEventId = keys[i].eventId
       var (readCbListCount, writeCbListCount) = (0, 0)
 
       if Event.Read in events or events == {Event.Error}:
@@ -1301,11 +1310,9 @@ else:
 
       var isCustomEvent = false
       if Event.User in events:
-        (readCbListCount, writeCbListCount) =
-          processBasicCallbacks(fd, Event.Read)
         isCustomEvent = true
-        if readCbListCount == 0:
-          p.selector.unregister(fd.int)
+        if userEventID in p.eventCallback:
+          p.eventCallback[userEventId]()
         result = true
 
       when ioselSupportedPlatform:
@@ -1528,25 +1535,38 @@ else:
       data.readList.add(cb)
       p.selector.registerProcess(pid, data)
 
+  proc onEvent(fd: AsyncFD): bool =
+    let p = getGlobalDispatcher()
+    let data = p.selector.getData(fd.SocketHandle)
+    echo "onEvent"
+    echo data.repr
+
   proc newAsyncEvent*(): AsyncEvent =
     ## Creates new ``AsyncEvent``.
-    result = AsyncEvent(newSelectEvent())
+    let p = getGlobalDispatcher()
+    inc p.eventIdSeq
+    result = AsyncEvent(id: p.eventIdSeq)
+    if p.selectEvent == nil:
+      p.selectEvent = newSelectEvent()
+      var data = newAsyncData()
+      data.readList.add(onEvent)
+      p.selector.registerEvent(SelectEvent(p.selectEvent), data)
 
   proc trigger*(ev: AsyncEvent) =
     ## Sets new ``AsyncEvent`` to signaled state.
-    trigger(SelectEvent(ev))
+    let p = getGlobalDispatcher()
+    p.selectEvent.trigger(ev.id)
 
   proc close*(ev: AsyncEvent) =
     ## Closes ``AsyncEvent``
-    close(SelectEvent(ev))
+    let p = getGlobalDispatcher()
+    p.eventCallback.del ev.id
 
-  proc addEvent*(ev: AsyncEvent, cb: Callback) =
+  proc addEvent*(ev: AsyncEvent, cb: EventCallback) =
     ## Start watching for event ``ev``, and call callback ``cb``, when
     ## ev will be set to signaled state.
     let p = getGlobalDispatcher()
-    var data = newAsyncData()
-    data.readList.add(cb)
-    p.selector.registerEvent(SelectEvent(ev), data)
+    p.eventCallback[ev.id] = cb
 
 proc drain*(timeout = 500) =
   ## Waits for completion events and processes them. Raises ``ValueError``
