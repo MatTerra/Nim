@@ -41,8 +41,6 @@ proc timerfd_create(clock_id: ClockId, flags: cint): cint
 proc timerfd_settime(ufd: cint, flags: cint,
                       utmr: var Itimerspec, otmr: var Itimerspec): cint
      {.cdecl, importc: "timerfd_settime", header: "<sys/timerfd.h>".}
-proc eventfd(count: cuint, flags: cint): cint
-     {.cdecl, importc: "eventfd", header: "<sys/eventfd.h>".}
 
 when not defined(android):
   proc signalfd(fd: cint, mask: var Sigset, flags: cint): cint
@@ -68,7 +66,7 @@ else:
     Selector*[T] = ref SelectorImpl[T]
 type
   SelectEventImpl = object
-    efd: cint
+    rfd, wfd: cint
   SelectEvent* = ptr SelectEventImpl
 
 proc newSelector*[T](): Selector[T] =
@@ -110,22 +108,25 @@ proc close*[T](s: Selector[T]) =
     raiseIOSelectorsError(osLastError())
 
 proc newSelectEvent*(): SelectEvent =
-  let fdci = eventfd(0, 0)
-  if fdci == -1:
+  var fds: array[2, cint]
+  if posix.pipe(fds) != 0:
     raiseIOSelectorsError(osLastError())
-  setNonBlocking(fdci)
+  setNonBlocking(fds[0])
+  setNonBlocking(fds[1])
   result = cast[SelectEvent](allocShared0(sizeof(SelectEventImpl)))
-  result.efd = fdci
+  result.rfd = fds[0]
+  result.wfd = fds[1]
 
-proc trigger*(ev: SelectEvent) =
-  var data: uint64 = 1
-  if posix.write(ev.efd, addr data, sizeof(uint64)) == -1:
+proc trigger*(ev: SelectEvent, eventId: SelectorEventId = 1) =
+  var data = eventId
+  if posix.write(ev.wfd, addr data, sizeof(data)) != sizeof(data):
     raiseIOSelectorsError(osLastError())
 
 proc close*(ev: SelectEvent) =
-  let res = posix.close(ev.efd)
+  let res1 = posix.close(ev.rfd)
+  let res2 = posix.close(ev.wfd)
   deallocShared(cast[pointer](ev))
-  if res != 0:
+  if res1 != 0 or res2 != 0:
     raiseIOSelectorsError(osLastError())
 
 template checkFd(s, f) =
@@ -253,7 +254,7 @@ proc unregister*[T](s: Selector[T], fd: int|SocketHandle) =
   clearKey(pkey)
 
 proc unregister*[T](s: Selector[T], ev: SelectEvent) =
-  let fdi = int(ev.efd)
+  let fdi = int(ev.rfd)
   s.checkFd(fdi)
   var pkey = addr(s.fds[fdi])
   doAssert(pkey.ident != InvalidIdent, "Event is not registered in the queue!")
@@ -359,12 +360,13 @@ when not defined(android):
     result = fdi
 
 proc registerEvent*[T](s: Selector[T], ev: SelectEvent, data: T) =
-  let fdi = int(ev.efd)
+  var fdi = int(ev.rfd)
   doAssert(s.fds[fdi].ident == InvalidIdent, "Event is already registered in the queue!")
-  s.setKey(fdi, {Event.User}, 0, data)
+  var events = {Event.User}
+  setKey(s, fdi, events, 0, data)
   var epv = EpollEvent(events: EPOLLIN or EPOLLRDHUP)
-  epv.data.u64 = ev.efd.uint
-  if epoll_ctl(s.epollFD, EPOLL_CTL_ADD, ev.efd, addr epv) != 0:
+  epv.data.u64 = ev.rfd.uint
+  if epoll_ctl(s.epollFD, EPOLL_CTL_ADD, ev.rfd, addr epv) != 0:
     raiseIOSelectorsError(osLastError())
   inc(s.count)
 
@@ -440,9 +442,9 @@ proc selectInto*[T](s: Selector[T], timeout: int,
               inc(i)
               continue
           elif Event.User in pkey.events:
-            var data: uint64 = 0
+            var data: SelectorEventId = 0
             if posix.read(cint(fdi), addr data,
-                          sizeof(uint64)) != sizeof(uint64):
+                          sizeof(data)) != sizeof(data):
               let err = osLastError()
               if err == OSErrorCode(EAGAIN):
                 inc(i)
@@ -450,6 +452,7 @@ proc selectInto*[T](s: Selector[T], timeout: int,
               else:
                 raiseIOSelectorsError(err)
             rkey.events.incl(Event.User)
+            rkey.eventId = data
       else:
         if (pevents and EPOLLIN) != 0:
           if Event.Read in pkey.events:
@@ -461,9 +464,9 @@ proc selectInto*[T](s: Selector[T], timeout: int,
               raiseIOSelectorsError(osLastError())
             rkey.events.incl(Event.Timer)
           elif Event.User in pkey.events:
-            var data: uint64 = 0
+            var data: SelectorEventId = 0
             if posix.read(cint(fdi), addr data,
-                          sizeof(uint64)) != sizeof(uint64):
+                          sizeof(SelectorEventId)) != sizeof(SelectorEventId):
               let err = osLastError()
               if err == OSErrorCode(EAGAIN):
                 inc(i)
@@ -471,6 +474,7 @@ proc selectInto*[T](s: Selector[T], timeout: int,
               else:
                 raiseIOSelectorsError(err)
             rkey.events.incl(Event.User)
+            rkey.eventId = data
 
       if Event.Oneshot in pkey.events:
         var epv = EpollEvent()

@@ -253,10 +253,13 @@ else:
   type
     IOSelectorsException* = object of Exception
 
+    SelectorEventId* = uint64
+
     ReadyKey* = object
       fd* : int
       events*: set[Event]
       errorCode*: OSErrorCode
+      eventId*: SelectorEventId
 
     SelectorKey[T] = object
       ident: int
