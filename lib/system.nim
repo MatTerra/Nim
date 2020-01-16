@@ -2133,7 +2133,7 @@ when notJSnotNims:
     proc unsetControlCHook*()
       ## Reverts a call to setControlCHook.
 
-  when hostOS != "standalone":
+  when hostOS != "standalone" and hostOS != "any":
     proc getStackTrace*(): string {.gcsafe.}
       ## Gets the current stack trace. This only works for debug builds.
 
@@ -2145,7 +2145,7 @@ when notJSnotNims:
   when defined(memtracker):
     include "system/memtracker"
 
-  when hostOS == "standalone":
+  when hostOS == "standalone" or hostOS == "any":
     include "system/embedded"
   else:
     include "system/excpt"
@@ -2216,7 +2216,7 @@ when notJSnotNims and hasThreadSupport and hostOS != "standalone":
   include "system/channels"
 
 
-when notJSnotNims and hostOS != "standalone":
+when notJSnotNims and hostOS != "standalone" and hostOS != "any":
   proc getCurrentException*(): ref Exception {.compilerRtl, inl, benign.} =
     ## Retrieves the current exception; if there is none, `nil` is returned.
     result = currException
