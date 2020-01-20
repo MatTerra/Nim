@@ -1,5 +1,5 @@
 discard """
-  cmd: '''nim c --newruntime $file'''
+  cmd: '''nim c -d:allocStats --newruntime $file'''
   output: '''OK 3'''
 """
 
@@ -48,3 +48,4 @@ except:
   inc ok
 
 echo "OK ", ok
+echo getAllocStats()

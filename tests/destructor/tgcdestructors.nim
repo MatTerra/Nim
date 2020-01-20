@@ -1,5 +1,5 @@
 discard """
-  cmd: '''nim c --newruntime $file'''
+  cmd: '''nim c -d:allocStats --newruntime $file'''
   output: '''hi
 ho
 ha
@@ -199,4 +199,4 @@ proc takeAinArray =
 takeAinArray()
 echo ga == "foo"
 
-
+echo getAllocStats()
