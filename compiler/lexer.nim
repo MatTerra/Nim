@@ -55,7 +55,7 @@ type
     tkFloatLit, tkFloat32Lit, tkFloat64Lit, tkFloat128Lit,
     tkStrLit, tkRStrLit, tkTripleStrLit,
     tkGStrLit, tkGTripleStrLit, tkCharLit, tkParLe, tkParRi, tkBracketLe,
-    tkBracketRi, tkCurlyLe, tkCurlyRi,
+    tkBracketRi, tkCurlyLe, tkCurlyOpen, tkCurlyRi,
     tkBracketDotLe, tkBracketDotRi, # [. and  .]
     tkCurlyDotLe, tkCurlyDotRi, # {.  and  .}
     tkParDotLe, tkParDotRi,   # (. and .)
@@ -96,7 +96,7 @@ const
     "tkFloatLit", "tkFloat32Lit", "tkFloat64Lit", "tkFloat128Lit",
     "tkStrLit", "tkRStrLit",
     "tkTripleStrLit", "tkGStrLit", "tkGTripleStrLit", "tkCharLit", "(",
-    ")", "[", "]", "{", "}", "[.", ".]", "{.", ".}", "(.", ".)",
+    ")", "[", "]", "{", "{", "}", "[.", ".]", "{.", ".}", "(.", ".)",
     ",", ";",
     ":", "::", "=", ".", "..", "[:",
     "tkOpr", "tkComment", "`",
@@ -1279,6 +1279,8 @@ proc rawGetTok*(L: var TLexer, tok: var TToken) =
       if L.buf[L.bufpos] == '.' and L.buf[L.bufpos+1] != '.':
         tok.tokType = tkCurlyDotLe
         inc(L.bufpos)
+      elif L.buf[L.bufpos] in {'\n','\r'}:
+        tok.tokType = tkCurlyOpen
       else:
         tok.tokType = tkCurlyLe
     of '}':

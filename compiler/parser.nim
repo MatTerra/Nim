@@ -316,8 +316,11 @@ proc checkBinary(p: TParser) {.inline.} =
 #| dollarExpr = primary (OP10 optInd primary)*
 
 proc colcom(p: var TParser, n: PNode) =
-  eat(p, tkColon)
-  skipComment(p, n)
+  if p.tok.tokType in {tkColon,tkCurlyOpen}:
+    getTok(p)
+    skipComment(p, n)
+  else:
+    eat(p, tkColon)
 
 const tkBuiltInMagics = {tkType, tkStatic, tkAddr}
 
@@ -1363,7 +1366,7 @@ proc postExprBlocks(p: var TParser, x: PNode): PNode =
     openingParams = parseParamList(p, retColon=false)
     openingPragmas = optPragmas(p)
 
-  if p.tok.tokType == tkColon:
+  if p.tok.tokType in {tkColon,tkCurlyOpen}:
     result = makeCall(result)
     getTok(p)
     skipComment(p, result)
@@ -1776,7 +1779,7 @@ proc parseRoutine(p: var TParser, kind: TNodeKind): PNode =
   else: result.add(p.emptyNode)
   # empty exception tracking:
   result.add(p.emptyNode)
-  if p.tok.tokType == tkEquals and p.validInd:
+  if p.tok.tokType in {tkEquals,tkCurlyOpen} and p.validInd:
     getTok(p)
     skipComment(p, result)
     result.add(parseStmt(p))
@@ -2258,7 +2261,7 @@ proc parseStmt(p: var TParser): PNode =
       while true:
         if p.tok.indent == p.currInd:
           discard
-        elif p.tok.tokType == tkSemiColon:
+        elif p.tok.tokType in {tkSemiColon,tkCurlyRi}:
           getTok(p)
           if p.tok.indent < 0 or p.tok.indent == p.currInd: discard
           else: break
@@ -2332,7 +2335,7 @@ proc parseTopLevelStmt(p: var TParser): PNode =
     # nimpretty support here
     if p.tok.indent != 0:
       if p.firstTok and p.tok.indent < 0: discard
-      elif p.tok.tokType != tkSemiColon:
+      elif p.tok.tokType notin {tkSemiColon,tkCurlyRi}:
         # special casing for better error messages:
         if p.tok.tokType == tkOpr and p.tok.ident.s == "*":
           parMessage(p, errGenerated,
@@ -2341,7 +2344,7 @@ proc parseTopLevelStmt(p: var TParser): PNode =
           parMessage(p, errInvalidIndentation)
     p.firstTok = false
     case p.tok.tokType
-    of tkSemiColon:
+    of tkSemiColon, tkCurlyRi:
       getTok(p)
       if p.tok.indent <= 0: discard
       else: parMessage(p, errInvalidIndentation)
