@@ -1,11 +1,8 @@
 discard """
 output: '''
 [4, 5, 6]
-
 [16, 25, 36]
-
 [16, 25, 36]
-
 apple
 banana
 Fruit
@@ -18,7 +15,7 @@ paper
 @[2, 3, 4]321
 9.0 4.0
 3
-@[(Field0: 1, Field1: 2), (Field0: 3, Field1: 5)]
+@[(1, 2), (3, 5)]
 2
 @["a", "new one", "c"]
 @[1, 2, 3]
@@ -27,6 +24,14 @@ dflfdjkl__abcdefgasfsgdfgsgdfggsdfasdfsafewfkljdsfajs
 dflfdjkl__abcdefgasfsgdfgsgdfggsdfasdfsafewfkljdsfajsdf
 kgdchlfniambejop
 fjpmholcibdgeakn
+2.0
+a:1
+a:2
+a:3
+ret:
+ret:1
+ret:12
+123
 '''
 joinable: false
 """
@@ -339,11 +344,11 @@ block troofregression:
     if $a != b:
       echo "Failure ", a, " != ", b
 
-  check type(4 ...< 1), "HSlice[system.int, system.int]"
-  check type(4 ...< ^1), "HSlice[system.int, system.BackwardsIndex]"
-  check type(4 ... pred(^1)), "HSlice[system.int, system.BackwardsIndex]"
-  check type(4 ... mypred(8)), "HSlice[system.int, system.int]"
-  check type(4 ... mypred(^1)), "HSlice[system.int, system.BackwardsIndex]"
+  check typeof(4 ...< 1), "HSlice[system.int, system.int]"
+  check typeof(4 ...< ^1), "HSlice[system.int, system.BackwardsIndex]"
+  check typeof(4 ... pred(^1)), "HSlice[system.int, system.BackwardsIndex]"
+  check typeof(4 ... mypred(8)), "HSlice[system.int, system.int]"
+  check typeof(4 ... mypred(^1)), "HSlice[system.int, system.BackwardsIndex]"
 
   var rot = 8
 
@@ -538,3 +543,47 @@ block trelaxedindextyp:
   proc foo(x: seq[int]; idx: uint64) = echo x[idx]
   proc foo(x: string|cstring; idx: uint64) = echo x[idx]
   proc foo(x: openArray[int]; idx: uint64) = echo x[idx]
+
+block t3899:
+  # https://github.com/nim-lang/Nim/issues/3899
+  type O = object
+    a: array[1..2,float]
+  template `[]`(x: O, i: int): float =
+    x.a[i]
+  const c = O(a: [1.0,2.0])
+  echo c[2]
+
+block arrayLiterals:
+  type ABC = enum A, B, C
+  template Idx[IdxT, ElemT](arr: array[IdxT, ElemT]): untyped = IdxT
+  doAssert [A: 0, B: 1].Idx is range[A..B]
+  doAssert [A: 0, 1, 3].Idx is ABC
+  doAssert [1: 2][1] == 2
+  doAssert [-1'i8: 2][-1] == 2
+  doAssert [-1'i8: 2, 3, 4, 5].Idx is range[-1'i8..2'i8]
+
+
+
+# bug #8316
+
+proc myAppend[T](a:T):string=
+  echo "a:", a
+  return $a
+
+template append2*(args: varargs[string, myAppend]): string =
+  var ret:string
+  for a in args:
+    echo "ret:", ret
+    ret.add(a)
+  ret
+
+let foo = append2("1", "2", "3")
+echo foo
+
+block t12466:
+  # https://github.com/nim-lang/Nim/issues/12466
+  var a: array[288, uint16]
+  for i in 0'u16 ..< 144'u16:
+    a[0'u16 + i] = i
+  for i in 0'u16 ..< 8'u16:
+    a[0'u16 + i] = i

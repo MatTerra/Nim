@@ -7,7 +7,7 @@ The documentation consists of several documents:
   | The Nim tutorial part two deals with the advanced language constructs.
 
 - | `Tutorial (part III) <tut3.html>`_
-  | The Nim tutorial part three about Nim's macro system
+  | The Nim tutorial part three about Nim's macro system.
 
 - | `Language Manual <manual.html>`_
   | The Nim manual is a draft that will evolve into a proper specification.
@@ -23,8 +23,8 @@ The documentation consists of several documents:
   | Description of some tools that come with the standard distribution.
 
 - | `GC <gc.html>`_
-  | Additional documentation about Nim's GC and how to operate it in a
-  | realtime setting.
+  | Additional documentation about Nim's multi-paradigm memory management strategies
+  | and how to operate them in a realtime setting.
 
 - | `Source code filters <filters.html>`_
   | The Nim compiler supports source code filters as a simple yet powerful
@@ -36,4 +36,3 @@ The documentation consists of several documents:
 
 - | `Index <theindex.html>`_
   | The generated index. **Index + (Ctrl+F) == Joy**
-

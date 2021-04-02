@@ -11,10 +11,11 @@
 ##
 ## Unless your application has very
 ## specific requirements and solely targets JavaScript, you should be using
-## the relevant functions in the ``math``, ``json``, and ``times`` stdlib
+## the relevant functions in the `math`, `json`, and `times` stdlib
 ## modules instead.
+import std/private/since
 
-when not defined(js) and not defined(Nimdoc):
+when not defined(js):
   {.error: "This module only works on the JavaScript platform".}
 
 type
@@ -73,7 +74,7 @@ proc parse*(d: DateLib, s: cstring): int {.importcpp.}
 proc newDate*(): DateTime {.
   importcpp: "new Date()".}
 
-proc newDate*(date: int|string): DateTime {.
+proc newDate*(date: int|int64|string): DateTime {.
   importcpp: "new Date(#)".}
 
 proc newDate*(year, month, day, hours, minutes,
@@ -90,7 +91,22 @@ proc getSeconds*(d: DateTime): int {.importcpp.}
 proc getYear*(d: DateTime): int {.importcpp.}
 proc getTime*(d: DateTime): int {.importcpp.}
 proc toString*(d: DateTime): cstring {.importcpp.}
+proc getUTCDate*(d: DateTime): int {.importcpp.}
+proc getUTCFullYear*(d: DateTime): int {.importcpp.}
+proc getUTCHours*(d: DateTime): int {.importcpp.}
+proc getUTCMilliseconds*(d: DateTime): int {.importcpp.}
+proc getUTCMinutes*(d: DateTime): int {.importcpp.}
+proc getUTCMonth*(d: DateTime): int {.importcpp.}
+proc getUTCSeconds*(d: DateTime): int {.importcpp.}
+proc getUTCDay*(d: DateTime): int {.importcpp.}
+proc getTimezoneOffset*(d: DateTime): int {.importcpp.}
+proc setFullYear*(d: DateTime, year: int) {.importcpp.}
 
 #JSON library
 proc stringify*(l: JsonLib, s: JsRoot): cstring {.importcpp.}
 proc parse*(l: JsonLib, s: cstring): JsRoot {.importcpp.}
+
+
+since (1, 5):
+  func debugger*() {.importjs: "debugger@".}
+    ## https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/debugger

@@ -1,7 +1,7 @@
 discard """
 output:'''
 void
-(Field0: "string", Field1: "string")
+("string", "string")
 1 mod 7
 @[2, 2, 2, 2, 2]
 impl 2 called
@@ -9,6 +9,7 @@ asd
 Foo
 Bar
 '''
+joinable: false
 """
 
 import typetraits, macros
@@ -33,7 +34,7 @@ block t898:
 
 
 block t7528:
-  macro bar(n: untyped): typed =
+  macro bar(n: untyped) =
     result = newNimNode(nnkStmtList, n)
     result.add(newCall("write", newIdentNode("stdout"), n))
 
