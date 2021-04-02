@@ -63,7 +63,7 @@ task "release", "release build":
     ## zip up all the files and such or something useful here
 
 task "testskel", "create skeleton test dir for testing":
-  let dirname = "test-"& $random(5000)
+  let dirname = "test-" & $rand(5000)
   removeDir dirName
   createDir dirName/"data/fnt"
   copyFile "data/fnt/LiberationMono-Regular", dirName/"data/fnt/LiberationMono-Regular.ttf"
@@ -76,16 +76,17 @@ task "testskel", "create skeleton test dir for testing":
 
 task "clean", "cleanup generated files":
   var dirs = @["nimcache", "server"/"nimcache"]
-  dirs.map(proc(x: var string) =
-    if existsDir(x): removeDir(x))
+  dirs.apply(proc(x: var string) =
+    if dirExists(x): removeDir(x))
 
 task "download", "download game assets":
   var
     skipAssets = false
     path = expandFilename("data")
+    client = newHttpClient()
   path.add DirSep
   path.add(extractFilename(GameAssets))
-  if existsFile(path):
+  if fileExists(path):
     echo "The file already exists\n",
       "[R]emove  [M]ove  [Q]uit  [S]kip    Source: ", GameAssets
     case stdin.readLine.toLowerAscii
@@ -101,7 +102,7 @@ task "download", "download game assets":
     echo "Downloading from ", GameAssets
   if not skipAssets:
     echo "Downloading to ", path
-    downloadFile GameAssets, path
+    client.downloadFile(GameAssets, path)
     echo "Download finished"
 
     let targetDir = parentDir(parentDir(path))
@@ -126,13 +127,13 @@ task "download", "download game assets":
   else:
     return
   path = extractFilename(BinLibs)
-  downloadFile BinLibs, path
+  client.downloadFile(BinLibs, path)
   echo "Downloaded dem libs ", path
   when true: echo "Unpack it yourself, sorry."
   else:  ## this crashes, dunno why
     var
       z: TZipArchive
-      destDir = getCurrentDir()/("unzip"& $random(5000))
+      destDir = getCurrentDir()/("unzip" & $rand(5000))
     if not z.open(path, fmRead):
       echo "Could not open zip, bad download?"
       return

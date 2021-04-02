@@ -1,13 +1,5 @@
 discard """
-  output: '''true
-true
-true
-true
-true
-true
-true
-true
-true
+  output: '''
 All:
 __really_obscure_dir_name/are.x
 __really_obscure_dir_name/created
@@ -27,31 +19,14 @@ __really_obscure_dir_name/created
 __really_obscure_dir_name/dirs
 __really_obscure_dir_name/some
 __really_obscure_dir_name/test
-false
-false
-false
-false
-false
-false
-false
-false
-false
-true
-true
 Raises
 Raises
-true
-true
-true
-true
-true
-true
-
 '''
 """
 # test os path creation, iteration, and deletion
 
-import os, strutils
+import os, strutils, pathnorm
+from stdtest/specialpaths import buildDir
 
 block fileOperations:
   let files = @["these.txt", "are.x", "testing.r", "files.q"]
@@ -60,17 +35,41 @@ block fileOperations:
   let dname = "__really_obscure_dir_name"
 
   createDir(dname)
-  echo dirExists(dname)
+  doAssert dirExists(dname)
+
+  block: # copyFile, copyFileToDir
+    doAssertRaises(OSError): copyFile(dname/"nonexistant.txt", dname/"nonexistant.txt")
+    let fname = "D20201009T112235"
+    let fname2 = "D20201009T112235.2"
+    let str = "foo1\0foo2\nfoo3\0"
+    let file = dname/fname
+    let file2 = dname/fname2
+    writeFile(file, str)
+    doAssert readFile(file) == str
+    let sub = "sub"
+    doAssertRaises(OSError): copyFile(file, dname/sub/fname2)
+    doAssertRaises(OSError): copyFileToDir(file, dname/sub)
+    doAssertRaises(ValueError): copyFileToDir(file, "")
+    copyFile(file, file2)
+    doAssert fileExists(file2)
+    doAssert readFile(file2) == str
+    createDir(dname/sub)
+    copyFileToDir(file, dname/sub)
+    doAssert fileExists(dname/sub/fname)
+    removeDir(dname/sub)
+    doAssert not dirExists(dname/sub)
+    removeFile(file)
+    removeFile(file2)
 
   # Test creating files and dirs
   for dir in dirs:
     createDir(dname/dir)
-    echo dirExists(dname/dir)
+    doAssert dirExists(dname/dir)
 
   for file in files:
     let fh = open(dname/file, fmReadWrite)
     fh.close()
-    echo fileExists(dname/file)
+    doAssert fileExists(dname/file)
 
   echo "All:"
 
@@ -93,23 +92,23 @@ block fileOperations:
   # Test removal of files dirs
   for dir in dirs:
     removeDir(dname/dir)
-    echo dirExists(dname/dir)
+    doAssert: not dirExists(dname/dir)
 
   for file in files:
     removeFile(dname/file)
-    echo fileExists(dname/file)
+    doAssert: not fileExists(dname/file)
 
   removeDir(dname)
-  echo dirExists(dname)
+  doAssert: not dirExists(dname)
 
   # createDir should create recursive directories
   createDir(dirs[0] / dirs[1])
-  echo dirExists(dirs[0] / dirs[1]) # true
+  doAssert dirExists(dirs[0] / dirs[1]) # true
   removeDir(dirs[0])
 
   # createDir should properly handle trailing separator
   createDir(dname / "")
-  echo dirExists(dname) # true
+  doAssert dirExists(dname) # true
   removeDir(dname)
 
   # createDir should raise IOError if the path exists
@@ -138,10 +137,10 @@ block fileOperations:
   copyDir("a", "../dest/a")
   removeDir("a")
 
-  echo dirExists("../dest/a/b")
-  echo fileExists("../dest/a/b/file.txt")
+  doAssert dirExists("../dest/a/b")
+  doAssert fileExists("../dest/a/b/file.txt")
 
-  echo fileExists("../dest/a/b/c/fileC.txt")
+  doAssert fileExists("../dest/a/b/c/fileC.txt")
   removeDir("../dest")
 
   # test copyDir:
@@ -152,9 +151,115 @@ block fileOperations:
   copyDir("a/", "../dest/a/")
   removeDir("a")
 
-  echo dirExists("../dest/a/b")
-  echo fileExists("../dest/a/file.txt")
+  doAssert dirExists("../dest/a/b")
+  doAssert fileExists("../dest/a/file.txt")
   removeDir("../dest")
+
+  # Symlink handling in `copyFile`, `copyFileWithPermissions`, `copyFileToDir`,
+  # `copyDir`, `copyDirWithPermissions`, `moveFile`, and `moveDir`.
+  block:
+    const symlinksAreHandled = not defined(windows)
+    const dname = buildDir/"D20210116T140629"
+    const subDir = dname/"sub"
+    const subDir2 = dname/"sub2"
+    const brokenSymlinkName = "D20210101T191320_BROKEN_SYMLINK"
+    const brokenSymlink = dname/brokenSymlinkName
+    const brokenSymlinkSrc = "D20210101T191320_nonexistant"
+    const brokenSymlinkCopy = brokenSymlink & "_COPY"
+    const brokenSymlinkInSubDir = subDir/brokenSymlinkName
+    const brokenSymlinkInSubDir2 = subDir2/brokenSymlinkName
+
+    createDir(subDir)
+    createSymlink(brokenSymlinkSrc, brokenSymlink)
+
+    # Test copyFile
+    when symlinksAreHandled:
+      doAssertRaises(OSError):
+        copyFile(brokenSymlink, brokenSymlinkCopy)
+      doAssertRaises(OSError):
+        copyFile(brokenSymlink, brokenSymlinkCopy, {cfSymlinkFollow})
+    copyFile(brokenSymlink, brokenSymlinkCopy, {cfSymlinkIgnore})
+    doAssert not fileExists(brokenSymlinkCopy)
+    copyFile(brokenSymlink, brokenSymlinkCopy, {cfSymlinkAsIs})
+    when symlinksAreHandled:
+      doAssert expandSymlink(brokenSymlinkCopy) == brokenSymlinkSrc
+      removeFile(brokenSymlinkCopy)
+    else:
+      doAssert not fileExists(brokenSymlinkCopy)
+    doAssertRaises(AssertionDefect):
+      copyFile(brokenSymlink, brokenSymlinkCopy,
+               {cfSymlinkAsIs, cfSymlinkFollow})
+
+    # Test copyFileWithPermissions
+    when symlinksAreHandled:
+      doAssertRaises(OSError):
+        copyFileWithPermissions(brokenSymlink, brokenSymlinkCopy)
+      doAssertRaises(OSError):
+        copyFileWithPermissions(brokenSymlink, brokenSymlinkCopy,
+                                options = {cfSymlinkFollow})
+    copyFileWithPermissions(brokenSymlink, brokenSymlinkCopy,
+                            options = {cfSymlinkIgnore})
+    doAssert not fileExists(brokenSymlinkCopy)
+    copyFileWithPermissions(brokenSymlink, brokenSymlinkCopy,
+                            options = {cfSymlinkAsIs})
+    when symlinksAreHandled:
+      doAssert expandSymlink(brokenSymlinkCopy) == brokenSymlinkSrc
+      removeFile(brokenSymlinkCopy)
+    else:
+      doAssert not fileExists(brokenSymlinkCopy)
+    doAssertRaises(AssertionDefect):
+      copyFileWithPermissions(brokenSymlink, brokenSymlinkCopy,
+                              options = {cfSymlinkAsIs, cfSymlinkFollow})
+
+    # Test copyFileToDir
+    when symlinksAreHandled:
+      doAssertRaises(OSError):
+        copyFileToDir(brokenSymlink, subDir)
+      doAssertRaises(OSError):
+        copyFileToDir(brokenSymlink, subDir, {cfSymlinkFollow})
+    copyFileToDir(brokenSymlink, subDir, {cfSymlinkIgnore})
+    doAssert not fileExists(brokenSymlinkInSubDir)
+    copyFileToDir(brokenSymlink, subDir, {cfSymlinkAsIs})
+    when symlinksAreHandled:
+      doAssert expandSymlink(brokenSymlinkInSubDir) == brokenSymlinkSrc
+      removeFile(brokenSymlinkInSubDir)
+    else:
+      doAssert not fileExists(brokenSymlinkInSubDir)
+
+    createSymlink(brokenSymlinkSrc, brokenSymlinkInSubDir)
+
+    # Test copyDir
+    copyDir(subDir, subDir2)
+    when symlinksAreHandled:
+      doAssert expandSymlink(brokenSymlinkInSubDir2) == brokenSymlinkSrc
+    else:
+      doAssert not fileExists(brokenSymlinkInSubDir2)
+    removeDir(subDir2)
+
+    # Test copyDirWithPermissions
+    copyDirWithPermissions(subDir, subDir2)
+    when symlinksAreHandled:
+      doAssert expandSymlink(brokenSymlinkInSubDir2) == brokenSymlinkSrc
+    else:
+      doAssert not fileExists(brokenSymlinkInSubDir2)
+    removeDir(subDir2)
+
+    # Test moveFile
+    moveFile(brokenSymlink, brokenSymlinkCopy)
+    when not defined(windows):
+      doAssert expandSymlink(brokenSymlinkCopy) == brokenSymlinkSrc
+    else:
+      doAssert symlinkExists(brokenSymlinkCopy)
+    removeFile(brokenSymlinkCopy)
+
+    # Test moveDir
+    moveDir(subDir, subDir2)
+    when not defined(windows):
+      doAssert expandSymlink(brokenSymlinkInSubDir2) == brokenSymlinkSrc
+    else:
+      doAssert symlinkExists(brokenSymlinkInSubDir2)
+
+    removeDir(dname)
 
 import times
 block modificationTime:
@@ -165,9 +270,9 @@ block modificationTime:
   setLastModificationTime("a", tm)
 
   when defined(macosx):
-    echo "true"
+    doAssert true
   else:
-    echo getLastModificationTime("a") == tm
+    doAssert getLastModificationTime("a") == tm
   removeFile("a")
 
 block walkDirRec:
@@ -189,13 +294,19 @@ block walkDirRec:
 
   removeDir("walkdir_test")
 
-when not defined(windows):
-  block walkDirRelative:
-    createDir("walkdir_test")
-    createSymlink(".", "walkdir_test/c")
-    for k, p in walkDir("walkdir_test", true):
-      doAssert k == pcLinkToDir
-    removeDir("walkdir_test")
+block: # walkDir
+  doAssertRaises(OSError):
+    for a in walkDir("nonexistant", checkDir = true): discard
+  doAssertRaises(OSError):
+    for p in walkDirRec("nonexistant", checkDir = true): discard
+
+  when not defined(windows):
+    block walkDirRelative:
+      createDir("walkdir_test")
+      createSymlink(".", "walkdir_test/c")
+      for k, p in walkDir("walkdir_test", true):
+        doAssert k == pcLinkToDir
+      removeDir("walkdir_test")
 
 block normalizedPath:
   doAssert normalizedPath("") == ""
@@ -232,17 +343,17 @@ block isHidden:
   when defined(posix):
     doAssert ".foo.txt".isHidden
     doAssert "bar/.foo.ext".isHidden
-    doAssert: not "bar".isHidden
-    doAssert: not "foo/".isHidden
-    # Corner cases: paths are not normalized when determining `isHidden`
-    doAssert: not ".foo/.".isHidden
-    doAssert: not ".foo/..".isHidden
+    doAssert not "bar".isHidden
+    doAssert not "foo/".isHidden
+    doAssert ".foo/.".isHidden
+    # Corner cases: `isHidden` is not yet `..` aware
+    doAssert not ".foo/..".isHidden
 
 block absolutePath:
   doAssertRaises(ValueError): discard absolutePath("a", "b")
   doAssert absolutePath("a") == getCurrentDir() / "a"
   doAssert absolutePath("a", "/b") == "/b" / "a"
-  when defined(Posix):
+  when defined(posix):
     doAssert absolutePath("a", "/b/") == "/b" / "a"
     doAssert absolutePath("a", "/b/c") == "/b/c" / "a"
     doAssert absolutePath("/a", "b/") == "/a"
@@ -263,3 +374,291 @@ block splitFile:
   doAssert splitFile("abc/.") == ("abc", ".", "")
   doAssert splitFile("..") == ("", "..", "")
   doAssert splitFile("a/..") == ("a", "..", "")
+  doAssert splitFile("/foo/abc....txt") == ("/foo", "abc...", ".txt")
+
+# execShellCmd is tested in tosproc
+
+block ospaths:
+  doAssert unixToNativePath("") == ""
+  doAssert unixToNativePath(".") == $CurDir
+  doAssert unixToNativePath("..") == $ParDir
+  doAssert isAbsolute(unixToNativePath("/"))
+  doAssert isAbsolute(unixToNativePath("/", "a"))
+  doAssert isAbsolute(unixToNativePath("/a"))
+  doAssert isAbsolute(unixToNativePath("/a", "a"))
+  doAssert isAbsolute(unixToNativePath("/a/b"))
+  doAssert isAbsolute(unixToNativePath("/a/b", "a"))
+  doAssert unixToNativePath("a/b") == joinPath("a", "b")
+
+  when defined(macos):
+    doAssert unixToNativePath("./") == ":"
+    doAssert unixToNativePath("./abc") == ":abc"
+    doAssert unixToNativePath("../abc") == "::abc"
+    doAssert unixToNativePath("../../abc") == ":::abc"
+    doAssert unixToNativePath("/abc", "a") == "abc"
+    doAssert unixToNativePath("/abc/def", "a") == "abc:def"
+  elif doslikeFileSystem:
+    doAssert unixToNativePath("./") == ".\\"
+    doAssert unixToNativePath("./abc") == ".\\abc"
+    doAssert unixToNativePath("../abc") == "..\\abc"
+    doAssert unixToNativePath("../../abc") == "..\\..\\abc"
+    doAssert unixToNativePath("/abc", "a") == "a:\\abc"
+    doAssert unixToNativePath("/abc/def", "a") == "a:\\abc\\def"
+  else:
+    #Tests for unix
+    doAssert unixToNativePath("./") == "./"
+    doAssert unixToNativePath("./abc") == "./abc"
+    doAssert unixToNativePath("../abc") == "../abc"
+    doAssert unixToNativePath("../../abc") == "../../abc"
+    doAssert unixToNativePath("/abc", "a") == "/abc"
+    doAssert unixToNativePath("/abc/def", "a") == "/abc/def"
+
+  block extractFilenameTest:
+    doAssert extractFilename("") == ""
+    when defined(posix):
+      doAssert extractFilename("foo/bar") == "bar"
+      doAssert extractFilename("foo/bar.txt") == "bar.txt"
+      doAssert extractFilename("foo/") == ""
+      doAssert extractFilename("/") == ""
+    when doslikeFileSystem:
+      doAssert extractFilename(r"foo\bar") == "bar"
+      doAssert extractFilename(r"foo\bar.txt") == "bar.txt"
+      doAssert extractFilename(r"foo\") == ""
+      doAssert extractFilename(r"C:\") == ""
+
+  block lastPathPartTest:
+    doAssert lastPathPart("") == ""
+    when defined(posix):
+      doAssert lastPathPart("foo/bar.txt") == "bar.txt"
+      doAssert lastPathPart("foo/") == "foo"
+      doAssert lastPathPart("/") == ""
+    when doslikeFileSystem:
+      doAssert lastPathPart(r"foo\bar.txt") == "bar.txt"
+      doAssert lastPathPart(r"foo\") == "foo"
+
+  template canon(x): untyped = normalizePath(x, '/')
+  doAssert canon"/foo/../bar" == "/bar"
+  doAssert canon"foo/../bar" == "bar"
+
+  doAssert canon"/f/../bar///" == "/bar"
+  doAssert canon"f/..////bar" == "bar"
+
+  doAssert canon"../bar" == "../bar"
+  doAssert canon"/../bar" == "/../bar"
+
+  doAssert canon("foo/../../bar/") == "../bar"
+  doAssert canon("./bla/blob/") == "bla/blob"
+  doAssert canon(".hiddenFile") == ".hiddenFile"
+  doAssert canon("./bla/../../blob/./zoo.nim") == "../blob/zoo.nim"
+
+  doAssert canon("C:/file/to/this/long") == "C:/file/to/this/long"
+  doAssert canon("") == ""
+  doAssert canon("foobar") == "foobar"
+  doAssert canon("f/////////") == "f"
+
+  doAssert relativePath("/foo/bar//baz.nim", "/foo", '/') == "bar/baz.nim"
+  doAssert normalizePath("./foo//bar/../baz", '/') == "foo/baz"
+
+  doAssert relativePath("/Users/me/bar/z.nim", "/Users/other/bad", '/') == "../../me/bar/z.nim"
+
+  doAssert relativePath("/Users/me/bar/z.nim", "/Users/other", '/') == "../me/bar/z.nim"
+  doAssert relativePath("/Users///me/bar//z.nim", "//Users/", '/') == "me/bar/z.nim"
+  doAssert relativePath("/Users/me/bar/z.nim", "/Users/me", '/') == "bar/z.nim"
+  doAssert relativePath("", "/users/moo", '/') == ""
+  doAssert relativePath("foo", "", '/') == "foo"
+  doAssert relativePath("/foo", "/Foo", '/') == (when FileSystemCaseSensitive: "../foo" else: ".")
+  doAssert relativePath("/Foo", "/foo", '/') == (when FileSystemCaseSensitive: "../Foo" else: ".")
+  doAssert relativePath("/foo", "/fOO", '/') == (when FileSystemCaseSensitive: "../foo" else: ".")
+  doAssert relativePath("/foO", "/foo", '/') == (when FileSystemCaseSensitive: "../foO" else: ".")
+
+  doAssert relativePath("foo", ".", '/') == "foo"
+  doAssert relativePath(".", ".", '/') == "."
+  doAssert relativePath("..", ".", '/') == ".."
+
+  doAssert relativePath("foo", "foo") == "."
+  doAssert relativePath("", "foo") == ""
+  doAssert relativePath("././/foo", "foo//./") == "."
+
+  doAssert relativePath(getCurrentDir() / "bar", "foo") == "../bar".unixToNativePath
+  doAssert relativePath("bar", getCurrentDir() / "foo") == "../bar".unixToNativePath
+
+  when doslikeFileSystem:
+    doAssert relativePath(r"c:\foo.nim", r"C:\") == r"foo.nim"
+    doAssert relativePath(r"c:\foo\bar\baz.nim", r"c:\foo") == r"bar\baz.nim"
+    doAssert relativePath(r"c:\foo\bar\baz.nim", r"d:\foo") == r"c:\foo\bar\baz.nim"
+    doAssert relativePath(r"\foo\baz.nim", r"\foo") == r"baz.nim"
+    doAssert relativePath(r"\foo\bar\baz.nim", r"\bar") == r"..\foo\bar\baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\\foo\bar") == r"baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\\foO\bar") == r"baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\\bar\bar") == r"\\foo\bar\baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\\foo\car") == r"\\foo\bar\baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\\goo\bar") == r"\\foo\bar\baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"c:\") == r"\\foo\bar\baz.nim"
+    doAssert relativePath(r"\\foo\bar\baz.nim", r"\foo") == r"\\foo\bar\baz.nim"
+    doAssert relativePath(r"c:\foo.nim", r"\foo") == r"c:\foo.nim"
+
+  doAssert joinPath("usr", "") == unixToNativePath"usr"
+  doAssert joinPath("", "lib") == "lib"
+  doAssert joinPath("", "/lib") == unixToNativePath"/lib"
+  doAssert joinPath("usr/", "/lib") == unixToNativePath"usr/lib"
+  doAssert joinPath("", "") == unixToNativePath"" # issue #13455
+  doAssert joinPath("", "/") == unixToNativePath"/"
+  doAssert joinPath("/", "/") == unixToNativePath"/"
+  doAssert joinPath("/", "") == unixToNativePath"/"
+  doAssert joinPath("/" / "") == unixToNativePath"/" # weird test case...
+  doAssert joinPath("/", "/a/b/c") == unixToNativePath"/a/b/c"
+  doAssert joinPath("foo/","") == unixToNativePath"foo/"
+  doAssert joinPath("foo/","abc") == unixToNativePath"foo/abc"
+  doAssert joinPath("foo//./","abc/.//") == unixToNativePath"foo/abc/"
+  doAssert joinPath("foo","abc") == unixToNativePath"foo/abc"
+  doAssert joinPath("","abc") == unixToNativePath"abc"
+
+  doAssert joinPath("gook/.","abc") == unixToNativePath"gook/abc"
+
+  # controversial: inconsistent with `joinPath("gook/.","abc")`
+  # on linux, `./foo` and `foo` are treated a bit differently for executables
+  # but not `./foo/bar` and `foo/bar`
+  doAssert joinPath(".", "/lib") == unixToNativePath"./lib"
+  doAssert joinPath(".","abc") == unixToNativePath"./abc"
+
+  # cases related to issue #13455
+  doAssert joinPath("foo", "", "") == "foo"
+  doAssert joinPath("foo", "") == "foo"
+  doAssert joinPath("foo/", "") == unixToNativePath"foo/"
+  doAssert joinPath("foo/", ".") == "foo"
+  doAssert joinPath("foo", "./") == unixToNativePath"foo/"
+  doAssert joinPath("foo", "", "bar/") == unixToNativePath"foo/bar/"
+
+  # issue #13579
+  doAssert joinPath("/foo", "../a") == unixToNativePath"/a"
+  doAssert joinPath("/foo/", "../a") == unixToNativePath"/a"
+  doAssert joinPath("/foo/.", "../a") == unixToNativePath"/a"
+  doAssert joinPath("/foo/.b", "../a") == unixToNativePath"/foo/a"
+  doAssert joinPath("/foo///", "..//a/") == unixToNativePath"/a/"
+  doAssert joinPath("foo/", "../a") == unixToNativePath"a"
+
+  when doslikeFileSystem:
+    doAssert joinPath("C:\\Program Files (x86)\\Microsoft Visual Studio 14.0\\Common7\\Tools\\", "..\\..\\VC\\vcvarsall.bat") == r"C:\Program Files (x86)\Microsoft Visual Studio 14.0\VC\vcvarsall.bat"
+    doAssert joinPath("C:\\foo", "..\\a") == r"C:\a"
+    doAssert joinPath("C:\\foo\\", "..\\a") == r"C:\a"
+
+block getTempDir:
+  block TMPDIR:
+    # TMPDIR env var is not used if either of these are defined.
+    when not (defined(tempDir) or defined(windows) or defined(android)):
+      if existsEnv("TMPDIR"):
+        let origTmpDir = getEnv("TMPDIR")
+        putEnv("TMPDIR", "/mytmp")
+        doAssert getTempDir() == "/mytmp"
+        delEnv("TMPDIR")
+        doAssert getTempDir() == "/tmp"
+        putEnv("TMPDIR", origTmpDir)
+      else:
+        doAssert getTempDir() == "/tmp"
+
+block osenv:
+  block delEnv:
+    const dummyEnvVar = "DUMMY_ENV_VAR" # This env var wouldn't be likely to exist to begin with
+    doAssert existsEnv(dummyEnvVar) == false
+    putEnv(dummyEnvVar, "1")
+    doAssert existsEnv(dummyEnvVar) == true
+    delEnv(dummyEnvVar)
+    doAssert existsEnv(dummyEnvVar) == false
+    delEnv(dummyEnvVar)         # deleting an already deleted env var
+    doAssert existsEnv(dummyEnvVar) == false
+  block:
+    doAssert getEnv("DUMMY_ENV_VAR_NONEXISTENT", "") == ""
+    doAssert getEnv("DUMMY_ENV_VAR_NONEXISTENT", " ") == " "
+    doAssert getEnv("DUMMY_ENV_VAR_NONEXISTENT", "Arrakis") == "Arrakis"
+
+block isRelativeTo:
+  doAssert isRelativeTo("/foo", "/")
+  doAssert isRelativeTo("/foo/bar", "/foo")
+  doAssert isRelativeTo("foo/bar", "foo")
+  doAssert isRelativeTo("/foo/bar.nim", "/foo/bar.nim")
+  doAssert isRelativeTo("./foo/", "foo")
+  doAssert isRelativeTo("foo", "./foo/")
+  doAssert isRelativeTo(".", ".")
+  doAssert isRelativeTo("foo/bar", ".")
+  doAssert not isRelativeTo("foo/bar.nims", "foo/bar.nim")
+  doAssert not isRelativeTo("/foo2", "/foo")
+
+block: # quoteShellWindows
+  doAssert quoteShellWindows("aaa") == "aaa"
+  doAssert quoteShellWindows("aaa\"") == "aaa\\\""
+  doAssert quoteShellWindows("") == "\"\""
+
+block: # quoteShellWindows
+  doAssert quoteShellPosix("aaa") == "aaa"
+  doAssert quoteShellPosix("aaa a") == "'aaa a'"
+  doAssert quoteShellPosix("") == "''"
+  doAssert quoteShellPosix("a'a") == "'a'\"'\"'a'"
+
+block: # quoteShell
+  when defined(posix):
+    doAssert quoteShell("") == "''"
+
+block: # normalizePathEnd
+  # handle edge cases correctly: shouldn't affect whether path is
+  # absolute/relative
+  doAssert "".normalizePathEnd(true) == ""
+  doAssert "".normalizePathEnd(false) == ""
+  doAssert "/".normalizePathEnd(true) == $DirSep
+  doAssert "/".normalizePathEnd(false) == $DirSep
+
+  when defined(posix):
+    doAssert "//".normalizePathEnd(false) == "/"
+    doAssert "foo.bar//".normalizePathEnd == "foo.bar"
+    doAssert "bar//".normalizePathEnd(trailingSep = true) == "bar/"
+  when defined(windows):
+    doAssert r"C:\foo\\".normalizePathEnd == r"C:\foo"
+    doAssert r"C:\foo".normalizePathEnd(trailingSep = true) == r"C:\foo\"
+    # this one is controversial: we could argue for returning `D:\` instead,
+    # but this is simplest.
+    doAssert r"D:\".normalizePathEnd == r"D:"
+    doAssert r"E:/".normalizePathEnd(trailingSep = true) == r"E:\"
+    doAssert "/".normalizePathEnd == r"\"
+
+block: # isValidFilename
+  # Negative Tests.
+  doAssert not isValidFilename("abcd", maxLen = 2)
+  doAssert not isValidFilename("0123456789", maxLen = 8)
+  doAssert not isValidFilename("con")
+  doAssert not isValidFilename("aux")
+  doAssert not isValidFilename("prn")
+  doAssert not isValidFilename("OwO|UwU")
+  doAssert not isValidFilename(" foo")
+  doAssert not isValidFilename("foo ")
+  doAssert not isValidFilename("foo.")
+  doAssert not isValidFilename("con.txt")
+  doAssert not isValidFilename("aux.bat")
+  doAssert not isValidFilename("prn.exe")
+  doAssert not isValidFilename("nim>.nim")
+  doAssert not isValidFilename(" foo.log")
+  # Positive Tests.
+  doAssert isValidFilename("abcd", maxLen = 42.Positive)
+  doAssert isValidFilename("c0n")
+  doAssert isValidFilename("foo.aux")
+  doAssert isValidFilename("bar.prn")
+  doAssert isValidFilename("OwO_UwU")
+  doAssert isValidFilename("cron")
+  doAssert isValidFilename("ux.bat")
+  doAssert isValidFilename("nim.nim")
+  doAssert isValidFilename("foo.log")
+
+import sugar
+
+block: # normalizeExe
+  doAssert "".dup(normalizeExe) == ""
+  when defined(posix):
+    doAssert "foo".dup(normalizeExe) == "./foo"
+    doAssert "foo/../bar".dup(normalizeExe) == "foo/../bar"
+  when defined(windows):
+    doAssert "foo".dup(normalizeExe) == "foo"
+
+block: # isAdmin
+  let isAzure = existsEnv("TF_BUILD") # xxx factor with testament.specs.isAzure
+  # In Azure on Windows tests run as an admin user
+  if isAzure and defined(windows): doAssert isAdmin()
+  # In Azure on POSIX tests run as a normal user
+  if isAzure and defined(posix): doAssert not isAdmin()

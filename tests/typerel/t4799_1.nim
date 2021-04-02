@@ -1,5 +1,6 @@
 discard """
-  outputsub: '''ObjectAssignmentError'''
+  targets: "c cpp"
+  outputsub: '''ObjectAssignmentDefect'''
   exitcode: "1"
 """
 

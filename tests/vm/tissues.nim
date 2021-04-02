@@ -1,16 +1,14 @@
-discard """
-  nimout: "(Field0: 2, Field1: 2, Field2: 2, Field3: 2)"
-"""
-
 import macros
 
-block t9043:
-  proc foo[N: static[int]](dims: array[N, int])=
+block t9043: # issue #9043
+  proc foo[N: static[int]](dims: array[N, int]): string =
     const N1 = N
     const N2 = dims.len
-    static: echo (N, dims.len, N1, N2)
+    const ret = $(N, dims.len, N1, N2)
+    static: doAssert ret == $(N, dims.len, N1, N2)
+    ret
 
-  foo([1, 2])
+  doAssert foo([1, 2]) == "(2, 2, 2, 2)"
 
 block t4952:
   proc doCheck(tree: NimNode) =
@@ -27,4 +25,4 @@ block t4952:
   static:
     let tree = newTree(nnkExprColonExpr)
     let t = (n: tree)
-    assert: t.n.kind == tree.kind
+    doAssert: t.n.kind == tree.kind

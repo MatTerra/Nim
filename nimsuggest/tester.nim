@@ -18,10 +18,12 @@ const
 
 template tpath(): untyped = getAppDir() / "tests"
 
+import std/compilesettings
+
 proc parseTest(filename: string; epcMode=false): Test =
   const cursorMarker = "#[!]#"
   let nimsug = curDir & addFileExt("nimsuggest", ExeExt)
-  let libpath = findExe("nim").splitFile().dir /../ "lib"
+  const libpath = querySetting(libPath)
   result.filename = filename
   result.dest = getTempDir() / extractFilename(filename)
   result.cmd = nimsug & " --tester " & result.dest
@@ -140,7 +142,7 @@ proc runCmd(cmd, dest: string): bool =
   of "!del":
     del(x)
   else:
-    quit "unkown command: " & cmd
+    quit "unknown command: " & cmd
 
 proc smartCompare(pattern, x: string): bool =
   if pattern.contains('*'):
@@ -206,13 +208,13 @@ proc sexpToAnswer(s: SexpNode): string =
       result.add '\t'
       result.add file
       result.add '\t'
-      result.add line
+      result.addInt line
       result.add '\t'
-      result.add col
+      result.addInt col
       result.add '\t'
       result.add doc
       result.add '\t'
-      result.add a[8].getNum
+      result.addInt a[8].getNum
       if a.len >= 10:
         result.add '\t'
         result.add a[9].getStr
@@ -240,6 +242,10 @@ proc skipDisabledTest(test: Test): bool =
 proc runEpcTest(filename: string): int =
   let s = parseTest(filename, true)
   if s.skipDisabledTest: return 0
+  for req, _ in items(s.script):
+    if req.startsWith("highlight"):
+      echo "disabled epc: " & s.filename
+      return 0
   for cmd in s.startup:
     if not runCmd(cmd, s.dest):
       quit "invalid command: " & cmd
@@ -247,7 +253,7 @@ proc runEpcTest(filename: string): int =
   let cl = parseCmdLine(epccmd)
   var p = startProcess(command=cl[0], args=cl[1 .. ^1],
                        options={poStdErrToStdOut, poUsePath,
-                       poInteractive, poDemon})
+                       poInteractive, poDaemon})
   let outp = p.outputStream
   let inp = p.inputStream
   var report = ""
@@ -289,7 +295,7 @@ proc runTest(filename: string): int =
   let cl = parseCmdLine(s.cmd)
   var p = startProcess(command=cl[0], args=cl[1 .. ^1],
                        options={poStdErrToStdOut, poUsePath,
-                       poInteractive, poDemon})
+                       poInteractive, poDaemon})
   let outp = p.outputStream
   let inp = p.inputStream
   var report = ""
@@ -325,7 +331,7 @@ proc main() =
     failures += runTest(xx)
     failures += runEpcTest(xx)
   else:
-    for x in walkFiles(getAppDir() / "tests/t*.nim"):
+    for x in walkFiles(tpath() / "t*.nim"):
       echo "Test ", x
       let xx = expandFilename x
       when not defined(windows):

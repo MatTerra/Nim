@@ -8,7 +8,7 @@ type
                         ## Valid versions are Versions of Visual Studio that permanently set a COMNTOOLS
                         ## environment variable. That includes Visual Studio version up to and including
                         ## Visual Studio 2015
-    vsUndefined = (0, ""), ## Version not specified, use latest recogized version on the system
+    vsUndefined = (0, ""), ## Version not specified, use latest recognized version on the system
     vs90  = (90,   "VS90COMNTOOLS"), ## Visual Studio 2008
     vs100 = (100, "VS100COMNTOOLS"), ## Visual Studio 2010
     vs110 = (110, "VS110COMNTOOLS"), ## Visual Studio 2012
@@ -16,7 +16,7 @@ type
     vs140 = (140, "VS140COMNTOOLS")  ## Visual Studio 2015
 
 const
-  vcvarsallRelativePath = joinPath("..", "..", "VC", "vcvarsall") ## Relative path from the COMNTOOLS path to the vcvarsall file.
+  vcvarsallRelativePath = joinPath("..", "..", "VC", "vcvarsall.bat") ## Relative path from the COMNTOOLS path to the vcvarsall file.
 
 proc vccEnvVcVarsAllPath*(version: VccEnvVersion = vsUndefined): string = 
   ## Returns the path to the VCC Developer Command Prompt executable for the specified VCC version.
@@ -39,9 +39,9 @@ proc vccEnvVcVarsAllPath*(version: VccEnvVersion = vsUndefined): string =
     for tryVersion in [vs140, vs120, vs110, vs100, vs90]:
       let tryPath = vccEnvVcVarsAllPath(tryVersion)
       if tryPath.len > 0:
-        result = tryPath
+        return tryPath
   else: # Specific version requested
     let key = $version
     let val = getEnv key
     if val.len > 0:
-      result = expandFilename(val & vcvarsallRelativePath)
+      result = try: expandFilename(joinPath(val, vcvarsallRelativePath)) except OSError: ""
